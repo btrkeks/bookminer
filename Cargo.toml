@@ -1,0 +1,26 @@
+[package]
+name = "bookminer"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = ""
+repository = "https://github.com/btrkeks/bookminer"
+license = "MIT"
+keywords = ["math", "latex", "books"]
+categories = ["mathematics", "education"]
+
+
+[dependencies]
+anyhow = "1.0"
+screenshots = "0.8.10"
+tui = "0.19"
+crossterm = "0.28.1"
+chrono = "0.4.38"
+tempfile = "3.13.0"
+clap = { version = "4.5.20", features = ["derive"] }
+dirs = "5.0.1"
+reqwest = { version = "0.12.8", features = ["blocking", "json"] }
+serde_json = "1.0.128"
+thiserror = "1.0.64"
+base64 = "0.22.1"
+serde = { version = "1.0.210", features = ["derive"] }
