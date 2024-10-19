@@ -1,89 +1,114 @@
-use std::fs;
-use std::path::Path;
+use std::{fs, io};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::exit;
 use anyhow::{Result, Context};
 use base64::Engine;
 use base64::engine::general_purpose;
 use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
-use serde::{Deserialize, Serialize};
-use crate::paths::get_anki_config_cache_file;
 
 #[derive(Error, Debug)]
 pub enum AnkiConnectError {
-    #[error("AnkiConnect is not running")]
+    #[error("AnkiConnect is not running or unreachable")]
     NotRunning,
-    #[error("Invalid filename")]
-    InvalidFilename,
+
+    #[error("Invalid filename: {0}")]
+    InvalidFilename(String),
+
     #[error("AnkiConnect error: {0}")]
     AnkiConnectError(String),
+
+    #[error("Failed to parse AnkiConnect response: {0}")]
+    ParsingError(String),
+
     #[error("HTTP error: {0}")]
     HttpError(#[from] reqwest::Error),
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
-    #[error("Other error: {0}")]
-    Other(#[from] anyhow::Error),
+
+    #[error("File error: {action} '{path}': {source}")]
+    FileError {
+        action: String,
+        path: PathBuf,
+        source: io::Error,
+    },
 }
 
-fn send_request(action: &str, params: Value) -> Result<Value> {
+fn send_request(action: &str, params: Value) -> Result<Value, AnkiConnectError> {
     let client = Client::new();
-    let response = client.post("http://localhost:8765")
-        .json(&json!({
-            "action": action,
-            "version": 6,
-            "params": params
-        }))
-        .send()
-        .context("Sending request to AnkiConnect")?;
+    const URL: &str = "http://localhost:8765";
+    let request_body = json!({
+        "action": action,
+        "version": 6,
+        "params": params
+    });
 
-    let result: Value = response.json().context("Parsing AnkiConnect response")?;
+    match client.post(URL).json(&request_body).send() {
+        Ok(response) => {
+            let result: Value = response.json()
+                .map_err(|e| AnkiConnectError::HttpError(e))?;
 
-    if let Some(error) = result.get("error") {
-        anyhow::bail!("AnkiConnect error: {}", error);
+            match result.get("error") {
+                Some(error) if !error.is_null() => {
+                    Err(AnkiConnectError::AnkiConnectError(error.to_string()))
+                },
+                _ => Ok(result["result"].clone()),
+            }
+        },
+        Err(e) => {
+            if e.is_connect() {
+                Err(AnkiConnectError::NotRunning)
+            } else {
+                Err(AnkiConnectError::HttpError(e))
+            }
+        }
     }
-
-    Ok(result["result"].clone())
 }
 
-fn store_file(filepath: &Path) -> Result<String, AnkiConnectError> {
+pub fn store_file(filepath: &Path) -> Result<(), AnkiConnectError> {
     let filename = filepath.file_name()
         .and_then(|name| name.to_str())
-        .ok_or(AnkiConnectError::InvalidFilename)?;
+        .ok_or_else(|| AnkiConnectError::InvalidFilename(filepath.display().to_string()))?;
 
-    let file_content = fs::read(filepath)?;
+    let file_content = fs::read(filepath).map_err(|e| AnkiConnectError::FileError {
+        action: "reading".to_string(),
+        path: filepath.to_path_buf(),
+        source: e,
+    })?;
 
     let params = json!({
         "filename": filename,
-        "data":  general_purpose::STANDARD.encode(file_content)
+        "data":  general_purpose::STANDARD.encode(file_content),
+        "deleteExisting": false,
     });
 
-    let result = send_request("storeMediaFile", params)?;
-    Ok(result.as_str().unwrap_or_default().to_string())
+    send_request("storeMediaFile", params)?;
+
+    // TODO: If there is a file with the same name (highly unlikely), Anki will rename the file.
+    //       The response will contain the name of the renamed file
+    Ok(())
 }
 
-struct FieldMapping {
-    field: String,
-    value: String,
-}
-
-pub fn send_note(anki_config: AnkiConfig, contents: Vec<FieldMapping>, tags: Vec<String>) -> Result<(), AnkiConnectError> {
-    let fields: Value = contents.into_iter()
-        .map(|fm| (fm.field, fm.value))
-        .collect();
-
-    let params = json!({
+fn create_add_note_params(deck: &str, note_type: &str, contents: &HashMap<String, String>, tags: &Vec<String>) -> Value {
+    json!({
         "note": {
-            "deckName": anki_config.deck_name,
-            "modelName": anki_config.note_type,
-            "fields": fields,
+            "deckName": deck,
+            "modelName": note_type,
+            "fields": contents,
             "tags": tags,
             "options": {
-                "allowDuplicate": false,
+                "allowDuplicate": true,
                 "duplicateScope": "deck"
             }
         }
-    });
+    })
+}
 
+pub fn send_note(deck: &str, note_type: &str, contents: &HashMap<String, String>, tags: &Vec<String>,
+                 files: &Vec<&PathBuf>) -> Result<(), AnkiConnectError> {
+    files.iter().try_for_each(|file| store_file(file) )?;
+    let params = create_add_note_params(deck, note_type, contents, &tags);
     send_request("addNote", params)?;
     Ok(())
 }
@@ -112,34 +137,95 @@ pub fn get_field_names(model_name: &str) -> Result<Vec<String>, AnkiConnectError
         .ok_or_else(|| AnkiConnectError::AnkiConnectError("Invalid response format".to_string()))
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AnkiConfig {
-    pub deck_name: String,
-    pub note_type: String,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-pub fn save_anki_config(config: &AnkiConfig) -> Result<(), AnkiConnectError> {
-    let cache_file = get_anki_config_cache_file()?;
+    #[test]
+    fn test_create_add_note_params_basic() {
+        let deck = "Test Deck";
+        let note_type = "Basic";
+        let mut contents = HashMap::new();
+        contents.insert("Front".to_string(), "Test front".to_string());
+        contents.insert("Back".to_string(), "Test back".to_string());
+        let tags = vec!["test".to_string(), "example".to_string()];
 
-    let config_json = serde_json::to_string_pretty(config)
-        .map_err(|e| AnkiConnectError::Other(e.into()))?;
+        let result = create_add_note_params(deck, note_type, &contents, &tags);
 
-    fs::write(&cache_file, config_json)
-        .map_err(AnkiConnectError::IoError)
-}
+        let expected = json!({
+            "note": {
+                "deckName": "Test Deck",
+                "modelName": "Basic",
+                "fields": {
+                    "Front": "Test front",
+                    "Back": "Test back"
+                },
+                "tags": ["test", "example"],
+                "options": {
+                    "allowDuplicate": true,
+                    "duplicateScope": "deck"
+                }
+            }
+        });
 
-pub fn load_anki_config() -> Result<Option<AnkiConfig>, AnkiConnectError> {
-    let cache_file = get_anki_config_cache_file()?;
-
-    if !cache_file.exists() {
-        return Ok(None);
+        assert_eq!(result, expected);
     }
 
-    let config_json = fs::read_to_string(&cache_file)
-        .map_err(AnkiConnectError::IoError)?;
+    #[test]
+    fn test_create_add_note_params_empty_fields() {
+        let deck = "Empty Deck";
+        let note_type = "Empty";
+        let contents = HashMap::new();
+        let tags: Vec<String> = vec![];
 
-    let config = serde_json::from_str(&config_json)
-        .map_err(|e| AnkiConnectError::Other(e.into()))?;
+        let result = create_add_note_params(deck, note_type, &contents, &tags);
 
-    Ok(Some(config))
+        let expected = json!({
+            "note": {
+                "deckName": "Empty Deck",
+                "modelName": "Empty",
+                "fields": {},
+                "tags": [],
+                "options": {
+                    "allowDuplicate": true,
+                    "duplicateScope": "deck"
+                }
+            }
+        });
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_create_add_note_params_multiple_fields() {
+        let deck = "Multi Field Deck";
+        let note_type = "Complex";
+        let mut contents = HashMap::new();
+        contents.insert("Field1".to_string(), "Content1".to_string());
+        contents.insert("Field2".to_string(), "Content2".to_string());
+        contents.insert("Field3".to_string(), "Content3".to_string());
+        let tags = vec!["complex".to_string()];
+
+        let result = create_add_note_params(deck, note_type, &contents, &tags);
+
+        let expected = json!({
+            "note": {
+                "deckName": "Multi Field Deck",
+                "modelName": "Complex",
+                "fields": {
+                    "Field1": "Content1",
+                    "Field2": "Content2",
+                    "Field3": "Content3"
+                },
+                "tags": ["complex"],
+                "options": {
+                    "allowDuplicate": true,
+                    "duplicateScope": "deck"
+                }
+            }
+        });
+
+        assert_eq!(result, expected);
+    }
 }

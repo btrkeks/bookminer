@@ -3,25 +3,23 @@ use anyhow::Context;
 use chrono::Local;
 use screenshots::image::RgbaImage;
 use screenshots::Screen;
+use anyhow::Result;
 
-fn create_unique_screenshot_filename() -> String {
+pub fn create_unique_screenshot_filename() -> String {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
     format!("screenshot_{}.png", timestamp)
 }
 
-fn capture_screenshot() -> anyhow::Result<RgbaImage> {
+pub(crate) fn capture_screenshot() -> Result<RgbaImage> {
     let screens = Screen::all()?;
     let screen = screens.first().context("No screen found")?;
-    let image = screen.capture()?;
+
+    let image = screen.capture()
+        .context("Capturing screen")?;
     Ok(image)
 }
 
-pub fn take_screenshot(dir: &Path) -> anyhow::Result<PathBuf> {
-    let screenshot_fn = create_unique_screenshot_filename();
-    let screenshot_path = dir.join(screenshot_fn);
-
-    let image = capture_screenshot()?;
-    image.save(&screenshot_path)?;
-
-    Ok(screenshot_path)
+pub fn save_image(image: &RgbaImage, path: &Path) -> Result<()> {
+    image.save(&path)
+        .context("Saving screenshot")
 }
