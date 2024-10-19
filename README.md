@@ -9,6 +9,8 @@ A (supported) PDF viewer is not necessary, but it will provide the file name
 and the current page number for later reference.
 
 **Note:** Currently, the application is only tested on Linux systems and probably won't work on Windows.
+Also, it currently uses arguments which are specific to the `st` terminal, but I expect to fix the latter within
+the next couple of days.
 
 (I am open for better names for this application)
 
@@ -69,6 +71,8 @@ map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 ```
 
 ### TODO
+- [ ] Allow setting terminal arguments
+- [ ] Handle space in tags
 - [ ] Display the currently selected Anki config in the final menu
 - [ ] Integrate with Okular using their [D-Bus API](https://docs.kde.org/trunk5/en/kid3/kid3/dbus-api.html)
 - [ ] Pressing space in the tag selection should advance to the next tag
