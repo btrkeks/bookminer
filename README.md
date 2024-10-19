@@ -12,6 +12,9 @@ and the current page number for later reference.
 
 (I am open for better names for this application)
 
+https://github.com/user-attachments/assets/78836e33-c59a-4773-83ac-4d5d028e5a82
+
+
 ## Installation
 
 ### Prerequisites
