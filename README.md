@@ -47,6 +47,8 @@ You can also specify a custom terminal and editor for a single session by using:
 TERMINAL=st EDITOR=nvim bookminer
 ```
 
+You can either use Vim keys (`j`,`k`) to move up and down in the menus or use arrow keys.
+
 ### Supported PDF viewers
 
 #### Sioyek
