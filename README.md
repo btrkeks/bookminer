@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/78836e33-c59a-4773-83ac-4d5d028e5a82
 
 ### Prerequisites
 - [Rust](https://www.rust-lang.org/tools/install) and [Cargo](https://github.com/rust-lang/cargo) installed on your system
+- The Anki add-on [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
 
 ### Steps
 1. Clone this repository:
