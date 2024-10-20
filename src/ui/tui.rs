@@ -31,10 +31,10 @@ impl Tui {
         Ok(Self { terminal, mouse })
     }
 
-    pub fn mouse(mut self, mouse: bool) -> Self {
-        self.mouse = mouse;
-        self
-    }
+    // pub fn mouse(mut self, mouse: bool) -> Self {
+    //     self.mouse = mouse;
+    //     self
+    // }
 
     pub fn enter(&mut self) -> Result<()> {
         crossterm::terminal::enable_raw_mode()?;
