@@ -73,12 +73,14 @@ map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 ```
 
 ### TODO
-- [ ] Allow setting terminal arguments
+#### Short-term
 - [ ] Handle space in tags
 - [ ] Display the currently selected Anki settings in the final menu
 - [ ] Integrate with Okular using their [D-Bus API](https://docs.kde.org/trunk5/en/kid3/kid3/dbus-api.html)
 - [ ] Pressing space in the tag selection should advance to the next tag
 - [ ] Try to detect wrong Anki settings (parse AnkiConnect error and act accordingly)
+
+#### Long-term
 - [ ] LaTeX lint on the fly?
 - [ ] LaTeX live preview?
 - [ ] Define special keywords on the front and back? E.g. !PROOF! or !REMARK!
