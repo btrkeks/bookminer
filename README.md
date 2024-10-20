@@ -74,6 +74,7 @@ map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 
 ### TODO
 #### Short-term
+- [ ] Allow deleting tags
 - [ ] Handle space in tags
 - [ ] Display the currently selected Anki settings in the final menu
 - [ ] Integrate with Okular using their [D-Bus API](https://docs.kde.org/trunk5/en/kid3/kid3/dbus-api.html)
