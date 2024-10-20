@@ -1,49 +1,32 @@
-use std::{fs, io};
-use std::path::Path;
-use std::process::Command;
-use anyhow::{Context, Result};
-use crate::anki_error_handling::handle_anki_connect_error;
+use crate::anki_error_handling::check_should_retry;
 use crate::ankiconnect::{get_deck_names, get_field_names, get_model_names};
-use crate::env_variables::{get_editor_binary_name};
 use crate::main_application::ApplicationState;
-use crate::menu_actions::{CancelAction, EditAnkiSettings, EditBackAction, EditFrontAction, MenuAction, SendCardAction};
+use crate::menu_actions::{
+    CancelAction, EditAnkiSettings, EditBackAction, EditFrontAction, MenuAction, SendCardAction,
+};
 use crate::possible_entries::PossibleContent;
 use crate::ui::tui::Tui;
-
-fn edit_file(file_name: &str, tmp_dir: &Path) -> io::Result<()> {
-    let file_path = tmp_dir.join(file_name);
-
-    if !file_path.exists() {
-        fs::File::create(&file_path)?;
-    }
-
-    let editor_name = get_editor_binary_name();
-    Command::new(editor_name)
-        .arg(file_path)
-        .status()?;
-    Ok(())
-}
+use anyhow::{Context, Result};
+use std::path::Path;
 
 pub fn edit_front(tui: &mut Tui, tmp_dir: &Path) -> Result<()> {
-    let path= tmp_dir.join("front.tex");
-    tui.edit_file(&path)
-        .context("Editing front file")
+    let path = tmp_dir.join("front.tex");
+    tui.edit_file(&path).context("Editing front file")
 }
 
 pub fn edit_back(tui: &mut Tui, tmp_dir: &Path) -> Result<()> {
-    let path= tmp_dir.join("back.tex");
-    tui.edit_file(&path)
-        .context("Editing front file")
+    let path = tmp_dir.join("back.tex");
+    tui.edit_file(&path).context("Editing front file")
 }
 
 pub fn select_anki_deck(tui: &mut Tui) -> Result<String> {
     loop {
         match get_deck_names() {
-            Ok(decks) =>{
+            Ok(decks) => {
                 let index = tui.show_single_selection_menu("Select Anki Deck", &decks)?;
                 return Ok(decks[index].clone()); // TODO: Is cloning necessary?
-            },
-            Err(e) => handle_anki_connect_error(e, tui)?,
+            }
+            Err(e) => check_should_retry(e, tui)?,
         }
     }
 }
@@ -51,11 +34,11 @@ pub fn select_anki_deck(tui: &mut Tui) -> Result<String> {
 pub fn select_anki_note_type(tui: &mut Tui) -> Result<String> {
     loop {
         match get_model_names() {
-            Ok(note_types) =>{
+            Ok(note_types) => {
                 let index = tui.show_single_selection_menu("Select Anki Note Type", &note_types)?;
                 return Ok(note_types[index].clone()); // TODO: Is cloning necessary?
-            },
-            Err(e) => handle_anki_connect_error(e, tui)?,
+            }
+            Err(e) => check_should_retry(e, tui)?,
         }
     }
 }
@@ -84,15 +67,18 @@ pub fn select_from_possible_content(tui: &mut Tui, field_name: &str) -> Result<P
     })
 }
 
-pub fn select_field_mapping_for_note_type(tui: &mut Tui, note_type: &str) -> Result<Vec<(String, PossibleContent)>> {
+pub fn select_field_mapping_for_note_type(
+    tui: &mut Tui,
+    note_type: &str,
+) -> Result<Vec<(String, PossibleContent)>> {
     let field_names;
     loop {
-        match get_field_names(&note_type) {
-            Ok(result) =>{
+        match get_field_names(note_type) {
+            Ok(result) => {
                 field_names = result;
                 break;
-            },
-            Err(e) => handle_anki_connect_error(e, tui)?,
+            }
+            Err(e) => check_should_retry(e, tui)?,
         }
     }
 
@@ -106,7 +92,14 @@ pub fn select_field_mapping_for_note_type(tui: &mut Tui, note_type: &str) -> Res
 }
 
 pub fn show_final_menu(state: &mut ApplicationState) -> Result<Box<dyn MenuAction>> {
-    let menu_items = vec!["Send Card", "Edit Front", "Edit Back", "Edit Anki Settings", "Edit Tags", "Cancel"];
+    let menu_items = vec![
+        "Send Card",
+        "Edit Front",
+        "Edit Back",
+        "Edit Anki Settings",
+        "Edit Tags",
+        "Cancel",
+    ];
 
     let selected = state.tui.show_single_selection_menu("Menu", &menu_items)?;
 

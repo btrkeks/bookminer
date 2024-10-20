@@ -1,15 +1,15 @@
-use std::{fs};
-use std::path::{Path, PathBuf};
-use crate::menu_actions::{EditAnkiSettings, EditBackAction, EditFrontAction, MenuAction, SendCardAction};
-use crate::paths::get_tags_file;
-use anyhow::{Context, Result};
-use crate::anki_config;
 use crate::anki_config::{load_anki_config, save_anki_config, AnkiConfig};
-use crate::tui_windows::{edit_back, edit_front, select_anki_deck, select_anki_note_type, select_field_mapping_for_note_type, show_final_menu};
-use crate::menu_actions::CancelAction;
+use crate::paths::get_tags_file;
+use crate::tui_windows::{
+    edit_back, edit_front, select_anki_deck, select_anki_note_type,
+    select_field_mapping_for_note_type, show_final_menu,
+};
 use crate::ui::tui::Tui;
+use anyhow::{Context, Result};
+use std::fs;
+use std::path::PathBuf;
 
-fn save_tags(tags: &Vec<String>) -> Result<()> {
+fn save_tags(tags: &[String]) -> Result<()> {
     let tags_file = get_tags_file()?;
     fs::write(&tags_file, tags.join("\n")).context("Storing tags")
 }
@@ -27,17 +27,6 @@ fn load_tags() -> Result<Vec<String>> {
     };
 
     Ok(tags)
-}
-
-fn display_anki_config(anki_config: &AnkiConfig) -> Result<()> {
-    // Display the Anki config in a window next to the selection menu
-    Ok(())
-}
-
-fn show_anki_not_running_dialog() {
-    // Show a dialog with
-    // "Could not connect to Anki. Check if Anki is running and AnkiConnect installed"
-    // [Retry] [Quit]
 }
 
 fn ask_for_anki_config(tui: &mut Tui) -> Result<AnkiConfig> {
@@ -65,10 +54,11 @@ pub struct ApplicationState {
     pub(crate) book_filename: Option<String>,
 }
 
-pub fn run_terminal_application(tmp_dir: PathBuf,
-                                screenshot_path: Option<PathBuf>,
-                                page_number: Option<u32>,
-                                book_filename: Option<String>
+pub fn run_terminal_application(
+    tmp_dir: PathBuf,
+    screenshot_path: Option<PathBuf>,
+    page_number: Option<u32>,
+    book_filename: Option<String>,
 ) -> Result<()> {
     let mut tui = Tui::new()?;
 
@@ -95,8 +85,10 @@ pub fn run_terminal_application(tmp_dir: PathBuf,
         book_filename,
     };
 
-    while let mut chosen_action = show_final_menu(&mut state)? {
+    loop {
+        let mut chosen_action = show_final_menu(&mut state)?;
         chosen_action.act(&mut state)?;
+
         if chosen_action.should_exit() {
             break;
         }

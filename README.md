@@ -40,7 +40,7 @@ https://github.com/user-attachments/assets/78836e33-c59a-4773-83ac-4d5d028e5a82
 
 ## Usage
 
-BookMiner uses the `EDITOR` and `TERMINAL` environment variables to choose the terminal and editor.
+The application uses the `EDITOR` and `TERMINAL` environment variables to choose the terminal and editor.
 You can either set these in your environment (`.bash_profile` for bash) or pass them like this:
 ```bash
 TERMINAL=st EDITOR=nvim bookminer
@@ -67,7 +67,7 @@ In the menus, you can then either use Vim keys (`j`,`k`) or arrow keys to move u
    ```
 
 #### Zathura
-Add the following to your Zathura config, replacing `<key>` with your preferred key:
+Add the following to your Zathura configuration file, replacing `<key>` with your preferred key:
 ```
 map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 ```
@@ -75,10 +75,10 @@ map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 ### TODO
 - [ ] Allow setting terminal arguments
 - [ ] Handle space in tags
-- [ ] Display the currently selected Anki config in the final menu
+- [ ] Display the currently selected Anki settings in the final menu
 - [ ] Integrate with Okular using their [D-Bus API](https://docs.kde.org/trunk5/en/kid3/kid3/dbus-api.html)
 - [ ] Pressing space in the tag selection should advance to the next tag
-- [ ] Try to detect wrong Anki config (parse AnkiConnect error and act accordingly)
+- [ ] Try to detect wrong Anki settings (parse AnkiConnect error and act accordingly)
 - [ ] LaTeX lint on the fly?
 - [ ] LaTeX live preview?
 - [ ] Define special keywords on the front and back? E.g. !PROOF! or !REMARK!

@@ -1,23 +1,23 @@
-mod main_application;
-mod screenshot;
-mod menu_actions;
-mod paths;
-mod tui_windows;
+mod anki_config;
+mod anki_error_handling;
 mod ankiconnect;
 mod env_variables;
-mod anki_config;
+mod main_application;
+mod menu_actions;
+mod paths;
 mod possible_entries;
+mod screenshot;
+mod tui_windows;
 mod ui;
-mod anki_error_handling;
 
-use std::path::{Path, PathBuf};
-use anyhow::{anyhow, Context, Result};
-use std::process::{Child, Command, Stdio};
-use clap::Parser;
-use tempfile::TempDir;
 use crate::env_variables::{get_terminal_args, get_terminal_binary_name};
 use crate::main_application::run_terminal_application;
-use crate::screenshot::{create_unique_screenshot_filename, capture_screenshot, save_image};
+use crate::screenshot::{capture_screenshot, create_unique_screenshot_filename, save_image};
+use anyhow::{anyhow, Context, Result};
+use clap::Parser;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use tempfile::TempDir;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -42,8 +42,15 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.main {
-        let tmp_dir = args.tmp_dir.ok_or_else(|| anyhow!("Missing tmp_dir argument"))?;
-        run_terminal_application(tmp_dir, args.screenshot_path, args.page_number, args.book_filename)?;
+        let tmp_dir = args
+            .tmp_dir
+            .ok_or_else(|| anyhow!("Missing tmp_dir argument"))?;
+        run_terminal_application(
+            tmp_dir,
+            args.screenshot_path,
+            args.page_number,
+            args.book_filename,
+        )?;
     } else {
         let screenshot = capture_screenshot()?;
 
@@ -51,7 +58,8 @@ fn main() -> Result<()> {
         let screenshot_fn = create_unique_screenshot_filename();
         let screenshot_path = tmp_dir.as_ref().join(screenshot_fn);
 
-        let mut main_application = spawn_terminal_with_main_process(tmp_dir.as_ref(), &screenshot_path, args)?;
+        let mut main_application =
+            spawn_terminal_with_main_process(tmp_dir.as_ref(), &screenshot_path, args)?;
         save_image(&screenshot, &screenshot_path)?;
 
         main_application.wait()?; // Must wait so that tmp_dir isn't cleaned up
@@ -64,12 +72,18 @@ fn create_tmp_dir() -> std::io::Result<TempDir> {
     tempfile::Builder::new().prefix("bookmining").tempdir()
 }
 
-fn spawn_terminal_with_main_process(tmp_dir: &Path, screenshot_path: &Path, args: Args) -> Result<Child> {
+fn spawn_terminal_with_main_process(
+    tmp_dir: &Path,
+    screenshot_path: &Path,
+    args: Args,
+) -> Result<Child> {
     let terminal_name = get_terminal_binary_name();
     let terminal_args = get_terminal_args();
 
     let mut command = Command::new(terminal_name);
-    terminal_args.iter().for_each(|arg| {command.arg(arg);});
+    terminal_args.iter().for_each(|arg| {
+        command.arg(arg);
+    });
 
     // Application arguments
     command
@@ -89,9 +103,7 @@ fn spawn_terminal_with_main_process(tmp_dir: &Path, screenshot_path: &Path, args
         command.arg("--book-filename").arg(pdf_name);
     }
 
-    command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     command
         .spawn()

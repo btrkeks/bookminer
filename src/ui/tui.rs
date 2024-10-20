@@ -1,26 +1,23 @@
-use std::{
-    ops::{Deref, DerefMut},
-};
-use std::path::Path;
-use std::process::Command;
+use crate::env_variables::get_editor_binary_name;
+use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
-use crossterm::terminal::disable_raw_mode;
 use ratatui::backend::CrosstermBackend as Backend;
 use ratatui::crossterm::{
     cursor,
-    event::{
-        DisableMouseCapture, EnableMouseCapture,
-        KeyEvent, MouseEvent,
-    },
+    event::{DisableMouseCapture, EnableMouseCapture},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::prelude::{Color, Constraint, Direction, Layout, Line, Modifier, Rect, Span, Style, Text};
+use ratatui::prelude::{
+    Color, Constraint, Direction, Layout, Line, Modifier, Rect, Span, Style, Text,
+};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
-use ratatui::Frame;
-use crate::env_variables::get_editor_binary_name;
+use std::path::Path;
+use std::process::Command;
+use std::{
+    fs, io,
+    ops::{Deref, DerefMut},
+};
 
 pub struct Tui {
     pub terminal: ratatui::Terminal<Backend<std::io::Stderr>>,
@@ -74,8 +71,7 @@ impl Tui {
 
     pub(crate) fn edit_file(&mut self, file_path: &Path) -> Result<()> {
         self.suspend()?;
-        let editor_name = get_editor_binary_name();
-        Command::new(editor_name).arg(file_path).status()?;
+        edit_file(file_path)?;
         self.resume()?;
         Ok(())
     }
@@ -85,10 +81,8 @@ impl Tui {
 
         loop {
             self.terminal.draw(|f| {
-                let size = f.size();
-                let block = Block::default()
-                    .title("Confirmation")
-                    .borders(Borders::ALL);
+                let size = f.area();
+                let block = Block::default().title("Confirmation").borders(Borders::ALL);
 
                 let area = centered_rect(60, 20, size);
 
@@ -104,32 +98,23 @@ impl Tui {
                             Constraint::Length(1),
                             Constraint::Length(1),
                         ]
-                            .as_ref(),
+                        .as_ref(),
                     )
                     .split(area);
 
-                let text = vec![
-                    Span::raw(msg),
-                ];
+                let text = vec![Span::raw(msg)];
                 let text_line = Line::from(text);
-                let message = Paragraph::new(Text::from(text_line)).wrap(ratatui::widgets::Wrap { trim: true });
+                let message = Paragraph::new(Text::from(text_line))
+                    .wrap(ratatui::widgets::Wrap { trim: true });
                 f.render_widget(message, chunks[0]);
 
                 let yes = Span::styled(
                     "Yes",
-                    Style::default().fg(if selected {
-                        Color::Green
-                    } else {
-                        Color::White
-                    }),
+                    Style::default().fg(if selected { Color::Green } else { Color::White }),
                 );
                 let no = Span::styled(
                     "No",
-                    Style::default().fg(if !selected {
-                        Color::Red
-                    } else {
-                        Color::White
-                    }),
+                    Style::default().fg(if !selected { Color::Red } else { Color::White }),
                 );
                 let options = Paragraph::new(Line::from(vec![yes, Span::raw(" / "), no]));
                 f.render_widget(options, chunks[2]);
@@ -158,23 +143,25 @@ impl Tui {
         }
     }
 
-    pub fn show_single_selection_menu<T: AsRef<str>>(&mut self, title: &str, items: &[T]) -> anyhow::Result<usize> {
+    pub fn show_single_selection_menu<T: AsRef<str>>(
+        &mut self,
+        title: &str,
+        items: &[T],
+    ) -> anyhow::Result<usize> {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
 
         loop {
             self.terminal.draw(|f| {
-                let size = f.size();
-                let block = Block::default()
-                    .title(title)
-                    .borders(Borders::ALL);
-                let items: Vec<ListItem> = items
-                    .iter()
-                    .map(|i| ListItem::new(i.as_ref()))
-                    .collect();
-                let list = List::new(items)
-                    .block(block)
-                    .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+                let size = f.area();
+                let block = Block::default().title(title).borders(Borders::ALL);
+                let items: Vec<ListItem> =
+                    items.iter().map(|i| ListItem::new(i.as_ref())).collect();
+                let list = List::new(items).block(block).highlight_style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                );
 
                 f.render_stateful_widget(list, size, &mut list_state);
             })?;
@@ -235,9 +222,9 @@ impl Tui {
                             Constraint::Min(1),
                             Constraint::Length(3),
                         ]
-                            .as_ref(),
+                        .as_ref(),
                     )
-                    .split(f.size());
+                    .split(f.area());
 
                 let help_message = if input_mode {
                     "Esc: stop editing, Enter: record tag"
@@ -305,14 +292,12 @@ impl Tui {
                 } else {
                     match key.code {
                         KeyCode::Enter => {
-                            return Ok(
-                                tags
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|&(i, _)| selected_tags[i])
-                                    .map(|(_, tag)| tag.clone())
-                                    .collect()
-                            );
+                            return Ok(tags
+                                .iter()
+                                .enumerate()
+                                .filter(|&(i, _)| selected_tags[i])
+                                .map(|(_, tag)| tag.clone())
+                                .collect());
                         }
                         KeyCode::Char('i') => {
                             input_mode = true;
@@ -385,7 +370,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
                 Constraint::Percentage(percent_y),
                 Constraint::Percentage((100 - percent_y) / 2),
             ]
-                .as_ref(),
+            .as_ref(),
         )
         .split(r);
 
@@ -397,7 +382,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
                 Constraint::Percentage(percent_x),
                 Constraint::Percentage((100 - percent_x) / 2),
             ]
-                .as_ref(),
+            .as_ref(),
         )
         .split(popup_layout[1])[1]
 }
@@ -478,3 +463,13 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 //         })
 //         .collect()
 // }
+
+fn edit_file(file_path: &Path) -> io::Result<()> {
+    if !file_path.exists() {
+        fs::File::create(file_path)?;
+    }
+
+    let editor_name = get_editor_binary_name();
+    Command::new(editor_name).arg(file_path).status()?;
+    Ok(())
+}

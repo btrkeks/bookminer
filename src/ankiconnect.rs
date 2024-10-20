@@ -1,13 +1,11 @@
-use std::{fs, io};
+use anyhow::Result;
+use base64::engine::general_purpose;
+use base64::Engine;
+use reqwest::blocking::Client;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::exit;
-use anyhow::{Result, Context};
-use base64::Engine;
-use base64::engine::general_purpose;
-use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use std::{fs, io};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,11 +16,11 @@ pub enum AnkiConnectError {
     #[error("Invalid filename: {0}")]
     InvalidFilename(String),
 
-    #[error("AnkiConnect error: {0}")]
-    AnkiConnectError(String),
+    #[error("Bad request error: {0}")]
+    BadRequestError(String),
 
-    #[error("Failed to parse AnkiConnect response: {0}")]
-    ParsingError(String),
+    #[error("Failed to parse AnkiConnect response")]
+    ParsingError,
 
     #[error("HTTP error: {0}")]
     HttpError(#[from] reqwest::Error),
@@ -46,16 +44,17 @@ fn send_request(action: &str, params: Value) -> Result<Value, AnkiConnectError> 
 
     match client.post(URL).json(&request_body).send() {
         Ok(response) => {
-            let result: Value = response.json()
-                .map_err(|e| AnkiConnectError::HttpError(e))?;
+            let result: Value = response
+                .json()
+                .map_err(|_e| AnkiConnectError::ParsingError)?;
 
             match result.get("error") {
                 Some(error) if !error.is_null() => {
-                    Err(AnkiConnectError::AnkiConnectError(error.to_string()))
-                },
+                    Err(AnkiConnectError::BadRequestError(error.to_string()))
+                }
                 _ => Ok(result["result"].clone()),
             }
-        },
+        }
         Err(e) => {
             if e.is_connect() {
                 Err(AnkiConnectError::NotRunning)
@@ -67,7 +66,8 @@ fn send_request(action: &str, params: Value) -> Result<Value, AnkiConnectError> 
 }
 
 pub fn store_file(filepath: &Path) -> Result<(), AnkiConnectError> {
-    let filename = filepath.file_name()
+    let filename = filepath
+        .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| AnkiConnectError::InvalidFilename(filepath.display().to_string()))?;
 
@@ -90,7 +90,12 @@ pub fn store_file(filepath: &Path) -> Result<(), AnkiConnectError> {
     Ok(())
 }
 
-fn create_add_note_params(deck: &str, note_type: &str, contents: &HashMap<String, String>, tags: &Vec<String>) -> Value {
+fn create_add_note_params(
+    deck: &str,
+    note_type: &str,
+    contents: &HashMap<String, String>,
+    tags: &Vec<String>,
+) -> Value {
     json!({
         "note": {
             "deckName": deck,
@@ -105,26 +110,41 @@ fn create_add_note_params(deck: &str, note_type: &str, contents: &HashMap<String
     })
 }
 
-pub fn send_note(deck: &str, note_type: &str, contents: &HashMap<String, String>, tags: &Vec<String>,
-                 files: &Vec<&PathBuf>) -> Result<(), AnkiConnectError> {
-    files.iter().try_for_each(|file| store_file(file) )?;
-    let params = create_add_note_params(deck, note_type, contents, &tags);
+pub fn send_note(
+    deck: &str,
+    note_type: &str,
+    contents: &HashMap<String, String>,
+    tags: &Vec<String>,
+    files: &[&PathBuf],
+) -> Result<(), AnkiConnectError> {
+    files.iter().try_for_each(|file| store_file(file))?;
+    let params = create_add_note_params(deck, note_type, contents, tags);
     send_request("addNote", params)?;
     Ok(())
 }
 
 pub fn get_deck_names() -> Result<Vec<String>, AnkiConnectError> {
     let result = send_request("deckNames", json!({}))?;
-    result.as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| AnkiConnectError::AnkiConnectError("Invalid response format".to_string()))
+    result
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .ok_or_else(|| AnkiConnectError::BadRequestError("Invalid response format".to_string()))
 }
 
 pub fn get_model_names() -> Result<Vec<String>, AnkiConnectError> {
     let result = send_request("modelNames", json!({}))?;
-    result.as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| AnkiConnectError::AnkiConnectError("Invalid response format".to_string()))
+    result
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .ok_or_else(|| AnkiConnectError::BadRequestError("Invalid response format".to_string()))
 }
 
 pub fn get_field_names(model_name: &str) -> Result<Vec<String>, AnkiConnectError> {
@@ -132,9 +152,14 @@ pub fn get_field_names(model_name: &str) -> Result<Vec<String>, AnkiConnectError
         "modelName": model_name
     });
     let result = send_request("modelFieldNames", params)?;
-    result.as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .ok_or_else(|| AnkiConnectError::AnkiConnectError("Invalid response format".to_string()))
+    result
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .ok_or_else(|| AnkiConnectError::BadRequestError("Invalid response format".to_string()))
 }
 
 #[cfg(test)]

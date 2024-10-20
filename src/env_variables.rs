@@ -6,7 +6,12 @@ pub fn get_editor_binary_name() -> String {
         Err(_) => {
             eprintln!("Error: The EDITOR environment variable is not set.");
             eprintln!("You can set it e.g. by running: export EDITOR=vim");
-            eprintln!("Or for a single run: EDITOR=vim {}", env::args().next().unwrap_or_else(|| String::from("program_name")));
+            eprintln!(
+                "Or for a single run: EDITOR=vim {}",
+                env::args()
+                    .next()
+                    .unwrap_or_else(|| String::from("program_name"))
+            );
             process::exit(1);
         }
     }
@@ -18,7 +23,12 @@ pub fn get_terminal_binary_name() -> String {
         Err(_) => {
             eprintln!("Error: The TERMINAL environment variable is not set.");
             eprintln!("You can set it e.g. by running: export TERMINAL=xterm");
-            eprintln!("Or for a single run: TERMINAL=xterm {}", env::args().next().unwrap_or_else(|| String::from("program_name")));
+            eprintln!(
+                "Or for a single run: TERMINAL=xterm {}",
+                env::args()
+                    .next()
+                    .unwrap_or_else(|| String::from("program_name"))
+            );
             process::exit(1);
         }
     }
@@ -26,7 +36,7 @@ pub fn get_terminal_binary_name() -> String {
 
 pub fn get_terminal_args() -> Vec<String> {
     match env::var("BM_TERMINAL_ARGS") {
-        Ok(terminal_args) => terminal_args.split(" ").map(|s| String::from(s)).collect(),
+        Ok(terminal_args) => terminal_args.split(" ").map(String::from).collect(),
         Err(_) => Vec::with_capacity(0),
     }
 }

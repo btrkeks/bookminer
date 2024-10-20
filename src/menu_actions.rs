@@ -1,10 +1,13 @@
-use std::collections::HashMap;
-use crate::tui_windows::{select_anki_deck, edit_back, edit_front, select_anki_note_type, select_field_mapping_for_note_type};
-use anyhow::{Context, Result};
-use crate::{ankiconnect, ui};
 use crate::anki_config::save_anki_config;
-use crate::anki_error_handling::handle_anki_connect_error;
+use crate::anki_error_handling::check_should_retry;
+use crate::ankiconnect;
 use crate::main_application::ApplicationState;
+use crate::tui_windows::{
+    edit_back, edit_front, select_anki_deck, select_anki_note_type,
+    select_field_mapping_for_note_type,
+};
+use anyhow::{Context, Result};
+use std::collections::HashMap;
 
 pub trait MenuAction {
     fn new() -> Self
@@ -34,12 +37,13 @@ impl MenuAction for CancelAction {
 }
 
 pub struct SendCardAction {
-    should_quit: bool,
+    // should_quit: bool,
 }
+
 impl MenuAction for SendCardAction {
     fn new() -> Self {
         Self {
-            should_quit: false,
+            // should_quit: false
         }
     }
 
@@ -60,7 +64,7 @@ impl MenuAction for SendCardAction {
                 &files_to_send,
             ) {
                 Ok(_) => return Ok(()),
-                Err(e) => handle_anki_connect_error(e, &mut state.tui)?,
+                Err(e) => check_should_retry(e, &mut state.tui)?,
             }
         }
     }
@@ -75,11 +79,8 @@ impl SendCardAction {
         let mut field_contents = HashMap::with_capacity(field_mapping.len());
 
         for (field_name, content_type) in field_mapping {
-            let content = content_type.get_anki_card_content(&state)?;
-            field_contents.insert(
-                field_name.clone(),
-                content,
-            );
+            let content = content_type.get_anki_card_content(state)?;
+            field_contents.insert(field_name.clone(), content);
         }
 
         Ok(field_contents)
@@ -96,7 +97,9 @@ impl MenuAction for EditAnkiSettings {
         let settings = vec!["deck", "note type", "mapping", "cancel"];
 
         loop {
-            let selection = state.tui.show_single_selection_menu("Choose the setting to change", &settings)?;
+            let selection = state
+                .tui
+                .show_single_selection_menu("Choose the setting to change", &settings)?;
 
             match selection {
                 0 => self.edit_deck(state)?,
@@ -131,7 +134,8 @@ impl EditAnkiSettings {
     }
 
     fn edit_field_mapping(&self, state: &mut ApplicationState) -> Result<()> {
-        let new_field_mapping = select_field_mapping_for_note_type(&mut state.tui, &state.anki_config.note_type)?;
+        let new_field_mapping =
+            select_field_mapping_for_note_type(&mut state.tui, &state.anki_config.note_type)?;
         state.anki_config.field_mapping = new_field_mapping;
         Ok(())
     }
