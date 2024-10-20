@@ -9,8 +9,6 @@ A (supported) PDF viewer is not necessary, but it will provide the file name
 and the current page number for later reference.
 
 **Note:** Currently, the application is only tested on Linux systems and probably won't work on Windows.
-Also, it currently uses arguments which are specific to the `st` terminal, but I expect to fix the latter within
-the next couple of days.
 
 (I am open for better names for this application)
 
@@ -24,32 +22,35 @@ https://github.com/user-attachments/assets/78836e33-c59a-4773-83ac-4d5d028e5a82
 
 ### Steps
 1. Clone this repository:
-   ```
+   ```bash
    git clone https://github.com/yourusername/bookminer.git
    cd bookminer
    ```
 
 2. Build the application:
-   ```
+   ```bash
    cargo build --release
    ```
 
 3. Add the compiled binary to your PATH:
-   ```
+   ```bash
    sudo cp ./target/release/bookminer /usr/local/bin/
    ```
 
 ## Usage
 
 BookMiner uses the `EDITOR` and `TERMINAL` environment variables to choose the terminal and editor.
-Ensure these are set in your environment. \
-Then map the binary `bookminer` binary to a key in your window manager. \
-You can also specify a custom terminal and editor for a single session by using:
+You can either set these in your environment (`.bash_profile` for bash) or pass them like this:
 ```bash
 TERMINAL=st EDITOR=nvim bookminer
 ```
+Then map the binary `bookminer` binary to a key in your window manager. \
+You can also pass arguments to the spawned terminal with the `BM_TERMINAL_ARGS` environment variable:
+```bash
+TERMINAL="st" BM_TERMINAL_ARGS="-n floatterm -g 90x25" bookminer
+```
 
-You can either use Vim keys (`j`,`k`) to move up and down in the menus or use arrow keys.
+In the menus, you can then either use Vim keys (`j`,`k`) or arrow keys to move up and down.
 
 ### Supported PDF viewers
 

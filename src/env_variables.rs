@@ -23,3 +23,10 @@ pub fn get_terminal_binary_name() -> String {
         }
     }
 }
+
+pub fn get_terminal_args() -> Vec<String> {
+    match env::var("BM_TERMINAL_ARGS") {
+        Ok(terminal_args) => terminal_args.split(" ").map(|s| String::from(s)).collect(),
+        Err(_) => Vec::with_capacity(0),
+    }
+}

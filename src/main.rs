@@ -15,7 +15,7 @@ use anyhow::{anyhow, Context, Result};
 use std::process::{Child, Command, Stdio};
 use clap::Parser;
 use tempfile::TempDir;
-use crate::env_variables::get_terminal_binary_name;
+use crate::env_variables::{get_terminal_args, get_terminal_binary_name};
 use crate::main_application::run_terminal_application;
 use crate::screenshot::{create_unique_screenshot_filename, capture_screenshot, save_image};
 
@@ -66,18 +66,14 @@ fn create_tmp_dir() -> std::io::Result<TempDir> {
 
 fn spawn_terminal_with_main_process(tmp_dir: &Path, screenshot_path: &Path, args: Args) -> Result<Child> {
     let terminal_name = get_terminal_binary_name();
+    let terminal_args = get_terminal_args();
 
     let mut command = Command::new(terminal_name);
-
-    command
-        .arg("-n")
-        .arg("floatterm")
-        .arg("-g")
-        .arg("90x25")
-        .arg("-e");
+    terminal_args.iter().for_each(|arg| {command.arg(arg);});
 
     // Application arguments
     command
+        .arg("-e")
         .arg(std::env::current_exe()?)
         .arg("--main")
         .arg("--tmp-dir")
