@@ -55,7 +55,7 @@ In the menus, you can then either use Vim keys (`j`,`k`) or arrow keys to move u
 
 ### Supported PDF viewers
 
-#### Sioyek
+#### [Sioyek](https://github.com/ahrm/sioyek)
 1. Open Sioyek's `prefs_user.config` file
 2. Add the following command:
    ```
@@ -66,7 +66,7 @@ In the menus, you can then either use Vim keys (`j`,`k`) or arrow keys to move u
    _add_to_anki       U
    ```
 
-#### Zathura
+#### [Zathura](https://pwmt.org/projects/zathura/)
 Add the following to your Zathura configuration file, replacing `<key>` with your preferred key:
 ```
 map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
