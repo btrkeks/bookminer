@@ -1,0 +1,8 @@
+dev_comments = false
+
+[Hunspell]
+lang = "en_US"
+skip_os_lookups = true
+use_builtin = true
+search_dirs = [ "." ]
+extra_dictionaries = ["custom-dictionary.dic"]

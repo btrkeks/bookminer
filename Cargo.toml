@@ -24,3 +24,6 @@ thiserror = "1.0.64"
 base64 = "0.22.1"
 serde = { version = "1.0.210", features = ["derive"] }
 ratatui = "0.28.1"
+
+[package.metadata.spellcheck]
+config = "spellcheck.toml"
