@@ -16,7 +16,23 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install latest nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: rustfmt, clippy
+    - name: Check formatting
+      run: cargo fmt -- --check
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Run Clippy
+      run: cargo clippy -- -D warnings
+    - name: Install cargo-spellcheck
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-spellcheck
+    - name: Run cargo-spellcheck
+      run: cargo spellcheck --code 1
