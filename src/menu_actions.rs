@@ -94,12 +94,12 @@ impl MenuAction for EditAnkiSettings {
     }
 
     fn act(&mut self, state: &mut ApplicationState) -> Result<()> {
-        let settings = vec!["deck", "note type", "mapping", "cancel"];
+        let settings = vec!["Deck", "Note Type", "Field Mapping", "Return"];
 
         loop {
             let selection = state
                 .tui
-                .show_single_selection_menu("Choose the setting to change", &settings)?;
+                .show_single_selection_menu("Choose which setting to change", &settings)?;
 
             match selection {
                 0 => self.edit_deck(state)?,

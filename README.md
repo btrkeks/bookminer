@@ -74,12 +74,12 @@ map <key> exec "bookminer --book-filename \"$FILE\" --page-number \"$PAGE\""
 
 ### TODO
 #### Short-term
-- [ ] Allow deleting tags
+- [ ] Take screenshot only of the focused window (Or atleast the focused monitor)
 - [ ] Handle space in tags
 - [ ] Display the currently selected Anki settings in the final menu
 - [ ] Integrate with Okular using their [D-Bus API](https://docs.kde.org/trunk5/en/kid3/kid3/dbus-api.html)
-- [ ] Pressing space in the tag selection should advance to the next tag
 - [ ] Try to detect wrong Anki settings (parse AnkiConnect error and act accordingly)
+- [ ] Search tags
 
 #### Long-term
 - [ ] LaTeX lint on the fly?

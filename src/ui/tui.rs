@@ -8,10 +8,8 @@ use ratatui::crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::prelude::{
-    Color, Constraint, Direction, Layout, Line, Modifier, Rect, Span, Style, Text,
-};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+use ratatui::prelude::{Alignment, Color, Constraint, Direction, Layout, Line, Modifier, Rect, Span, Style, Stylize, Text};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use std::path::Path;
 use std::process::Command;
 use std::{
@@ -59,15 +57,20 @@ impl Tui {
 
     pub fn suspend(&mut self) -> Result<()> {
         self.exit()?;
-        // #[cfg(not(windows))]
-        // signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
         Ok(())
     }
 
     pub fn resume(&mut self) -> Result<()> {
         self.enter()?;
+        self.terminal.clear()?;
         Ok(())
     }
+
+    // pub fn force_refresh(&mut self) -> Result<()> {
+    //     self.terminal.clear()?;
+    //     self.terminal.flush()?;
+    //     Ok(())
+    // }
 
     pub(crate) fn edit_file(&mut self, file_path: &Path) -> Result<()> {
         self.suspend()?;
@@ -79,44 +82,53 @@ impl Tui {
     pub fn show_dialog(&mut self, msg: &str) -> Result<bool> {
         let mut selected = true;
 
+        let normal_style = Style::default().white();
+        let yes_style = Style::default().green();
+        let no_style = Style::default().red();
+        let block_style = Style::default();
+
         loop {
             self.terminal.draw(|f| {
                 let size = f.area();
-                let block = Block::default().title("Confirmation").borders(Borders::ALL);
 
-                let area = centered_rect(60, 20, size);
+                // Calculate required dimensions
+                let msg_width = size.width.saturating_sub(4);
+                let content_height = 4; // title + message + space + options
+                let content_width = msg.len().max(20).min(msg_width as usize) as u16 + 4;
 
-                f.render_widget(Clear, area); // Clear the area first
-                f.render_widget(block, area);
+                let area = centered_content_rect(content_width, content_height, size);
 
+                let block = Block::new()
+                    .title("Confirmation")
+                    .borders(Borders::ALL)
+                    .style(block_style);
+
+                f.render_widget(Clear, area);
+                f.render_widget(block.clone(), area);
+
+                let inner_area = block.inner(area);
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
-                    .margin(2)
-                    .constraints(
-                        [
-                            Constraint::Length(1),
-                            Constraint::Length(1),
-                            Constraint::Length(1),
-                        ]
-                        .as_ref(),
-                    )
-                    .split(area);
+                    .constraints([
+                        Constraint::Length(1),  // Message
+                        Constraint::Length(1),  // Space
+                        Constraint::Length(1),  // Options
+                    ])
+                    .split(inner_area);
 
-                let text = vec![Span::raw(msg)];
-                let text_line = Line::from(text);
-                let message = Paragraph::new(Text::from(text_line))
-                    .wrap(ratatui::widgets::Wrap { trim: true });
+                let message = Paragraph::new(msg)
+                    .style(normal_style)
+                    .wrap(Wrap { trim: true });
                 f.render_widget(message, chunks[0]);
 
-                let yes = Span::styled(
-                    "Yes",
-                    Style::default().fg(if selected { Color::Green } else { Color::White }),
-                );
-                let no = Span::styled(
-                    "No",
-                    Style::default().fg(if !selected { Color::Red } else { Color::White }),
-                );
-                let options = Paragraph::new(Line::from(vec![yes, Span::raw(" / "), no]));
+                let options = Line::from(vec![
+                    Span::styled("Yes", if selected { yes_style } else { normal_style }),
+                    Span::raw(" / "),
+                    Span::styled("No", if !selected { no_style } else { normal_style }),
+                ]);
+
+                let options = Paragraph::new(options)
+                    .alignment(Alignment::Center);
                 f.render_widget(options, chunks[2]);
             })?;
 
@@ -211,6 +223,17 @@ impl Tui {
         let mut new_tag = String::new();
         let mut input_mode = false;
 
+        // Helper function to advance selection
+        fn advance_selection(current: Option<usize>, max: usize) -> Option<usize> {
+            if max == 0 {
+                return None;
+            }
+            Some(match current {
+                Some(i) => if i >= max - 1 { 0 } else { i + 1 },
+                None => 0,
+            })
+        }
+
         loop {
             self.terminal.draw(|f| {
                 let chunks = Layout::default()
@@ -222,14 +245,14 @@ impl Tui {
                             Constraint::Min(1),
                             Constraint::Length(3),
                         ]
-                        .as_ref(),
+                            .as_ref(),
                     )
                     .split(f.area());
 
                 let help_message = if input_mode {
                     "Esc: stop editing, Enter: record tag"
                 } else {
-                    "i: add tag, Space: toggle, Enter: confirm"
+                    "i: add tag, Space: toggle and advance, d: delete, g/G: first/last, Enter: confirm"
                 };
                 let help_paragraph = Paragraph::new(help_message)
                     .style(Style::default().fg(Color::Gray))
@@ -282,9 +305,11 @@ impl Tui {
                             new_tag.pop();
                         }
                         KeyCode::Enter => {
-                            tags.push(new_tag.clone());
-                            selected_tags.push(true);
-                            new_tag.clear();
+                            if !new_tag.is_empty() {
+                                tags.push(new_tag.clone());
+                                selected_tags.push(true);
+                                new_tag.clear();
+                            }
                             input_mode = false;
                         }
                         _ => {}
@@ -302,35 +327,68 @@ impl Tui {
                         KeyCode::Char('i') => {
                             input_mode = true;
                         }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            let i = match list_state.selected() {
-                                Some(i) => {
-                                    if i >= tags.len() - 1 {
-                                        0
-                                    } else {
-                                        i + 1
+                        KeyCode::Char('g') => {
+                            if !tags.is_empty() {
+                                list_state.select(Some(0)); // Jump to first
+                            }
+                        }
+                        KeyCode::Char('G') => {
+                            if !tags.is_empty() {
+                                list_state.select(Some(tags.len() - 1)); // Jump to last
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            if let Some(selected_idx) = list_state.selected() {
+                                if !tags.is_empty() {
+                                    // Remove the tag and its selection state
+                                    tags.remove(selected_idx);
+                                    selected_tags.remove(selected_idx);
+
+                                    // Adjust the selection to prevent out-of-bounds
+                                    if tags.is_empty() {
+                                        list_state.select(None);
+                                    } else if selected_idx >= tags.len() {
+                                        list_state.select(Some(tags.len() - 1));
                                     }
                                 }
-                                None => 0,
-                            };
-                            list_state.select(Some(i));
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if !tags.is_empty() {
+                                let i = match list_state.selected() {
+                                    Some(i) => {
+                                        if i >= tags.len() - 1 {
+                                            0
+                                        } else {
+                                            i + 1
+                                        }
+                                    }
+                                    None => 0,
+                                };
+                                list_state.select(Some(i));
+                            }
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
-                            let i = match list_state.selected() {
-                                Some(i) => {
-                                    if i == 0 {
-                                        tags.len() - 1
-                                    } else {
-                                        i - 1
+                            if !tags.is_empty() {
+                                let i = match list_state.selected() {
+                                    Some(i) => {
+                                        if i == 0 {
+                                            tags.len() - 1
+                                        } else {
+                                            i - 1
+                                        }
                                     }
-                                }
-                                None => 0,
-                            };
-                            list_state.select(Some(i));
+                                    None => 0,
+                                };
+                                list_state.select(Some(i));
+                            }
                         }
                         KeyCode::Char(' ') => {
                             if let Some(i) = list_state.selected() {
+                                // Toggle the current selection
                                 selected_tags[i] = !selected_tags[i];
+                                // Advance the selection (wrapping around)
+                                list_state.select(advance_selection(Some(i), tags.len()));
                             }
                         }
                         _ => {}
@@ -361,108 +419,17 @@ impl Drop for Tui {
     }
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(r);
+fn centered_content_rect(width: u16, height: u16, container: Rect) -> Rect {
+    let x = container.x + (container.width.saturating_sub(width)) / 2;
+    let y = container.y + (container.height.saturating_sub(height)) / 2;
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(popup_layout[1])[1]
+    Rect {
+        x,
+        y,
+        width: width.min(container.width),
+        height: height.min(container.height),
+    }
 }
-
-// fn draw_tag_menu<B: Backend>(
-//     f: &mut Frame<B>,
-//     chunks: &[Rect],
-//     input_mode: bool,
-//     new_tag: &str,
-//     tags: &[String],
-//     selected_tags: &[bool],
-//     list_state: &mut ListState,
-// ) {
-//     // Draw help message
-//     let (msg, style) = create_help_message(input_mode);
-//     let help_message = Paragraph::new(Line::from(msg)).style(style);
-//     f.render_widget(help_message, chunks[0]);
-//
-//     // Draw tag list
-//     let items: Vec<ListItem> = create_tag_list_items(tags, selected_tags);
-//     let items = List::new(items)
-//         .block(Block::default().borders(Borders::ALL).title("Tags"))
-//         .highlight_style(
-//             Style::default()
-//                 .bg(Color::Yellow)
-//                 .fg(Color::Black)
-//                 .add_modifier(Modifier::BOLD),
-//         );
-//     f.render_stateful_widget(items, chunks[1], list_state);
-//
-//     // Draw input field
-//     let input = Paragraph::new(new_tag)
-//         .style(if input_mode {
-//             Style::default().fg(Color::Yellow)
-//         } else {
-//             Style::default()
-//         })
-//         .block(Block::default().borders(Borders::ALL).title("New Tag"));
-//     f.render_widget(input, chunks[2]);
-// }
-//
-// fn create_help_message(input_mode: bool) -> (Vec<Span<'static>>, Style) {
-//     if input_mode {
-//         (
-//             vec![
-//                 Span::raw("Press "),
-//                 Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
-//                 Span::raw(" to stop editing, "),
-//                 Span::styled("Enter", Style::default().add_modifier(Modifier::BOLD)),
-//                 Span::raw(" to record the new tag"),
-//             ],
-//             Style::default(),
-//         )
-//     } else {
-//         (
-//             vec![
-//                 Span::raw("Press "),
-//                 Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-//                 Span::raw(" to exit, "),
-//                 Span::styled("i", Style::default().add_modifier(Modifier::BOLD)),
-//                 Span::raw(" to add new tag"),
-//             ],
-//             Style::default(),
-//         )
-//     }
-// }
-//
-// fn create_tag_list_items(tags: &[String], selected_tags: &[bool]) -> Vec<ListItem> {
-//     tags.iter()
-//         .enumerate()
-//         .map(|(i, t)| {
-//             let content = Line::from(Span::raw(format!(
-//                 "{} {}",
-//                 if selected_tags[i] { "[x]" } else { "[ ]" },
-//                 t
-//             )));
-//             ListItem::new(content)
-//         })
-//         .collect()
-// }
 
 fn edit_file(file_path: &Path) -> io::Result<()> {
     if !file_path.exists() {
